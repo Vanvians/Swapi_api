@@ -9,4 +9,5 @@ type Movie struct{
 	Producer string `json:"producer"`
 	ReleaseDate time.Time `json:"release_date"`
 	OpeningCrawl string `json:"opening_crawl"`
+	Characters string `json:"`
 }
