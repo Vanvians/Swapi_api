@@ -12,8 +12,8 @@ import(
 	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
 
-	"github.com/jcezetah/Swapi_api/models"
-	"github.com/jcezetah/Swapi_api/utils"
+	"github.com/jcezetah/swapi_api/models"
+	"github.com/jcezetah/swapi_api/utils"
 )
 
 type MovieService struct {
