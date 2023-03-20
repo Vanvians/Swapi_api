@@ -5,7 +5,7 @@ import (
     "log"
 
     "github.com/go-redis/redis"
-    "github.com/jcezetah/swapi_api/models"
+    "swapi_api/models"
     "gorm.io/driver/postgres"
     "gorm.io/gorm"
 )

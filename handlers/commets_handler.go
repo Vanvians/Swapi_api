@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	"github.com/jcezetah/swapi_api/models"
-	"github.com/swapi_api/services"
-	"github.com/swapi_api/utils"
+	"swapi_api/services"
+	"swapi_api/utils"
 
 	"github.com/gorilla/mux"
 )

@@ -4,9 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/jcezetah/swapi_api/models"
-	"github.com/jcezetah/swapi_api/services"
-	"github.com/jcezetah/swapi_api/utils"
+	"swapi_api/models"
+	"swapi_api/services"
+	"swapi_api/utils"
+	"swapi_api/db"
 	"github.com/gorilla/mux"
 )
 
