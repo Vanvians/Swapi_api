@@ -1,57 +1,116 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
-	"swapi_api/models"
-	"swapi_api/services"
-	"swapi_api/utils"
-	"swapi_api/db"
 	"github.com/gorilla/mux"
+
+	"github.com/jcezetah/Swapi_api/services"
+	"github.com/jcezetah/Swapi_api/utils"
 )
 
-type MovieHandler struct{
-	service services.MovieService
+type MovieHandler struct {
+	movieService *services.MovieService
 }
 
-func NewMovieHandler(service services.MovieService) *MovieHandler{
-	return &MovieHandler{
-		service:service,
+func NewMovieHandler(movieService *services.MovieService) *MovieHandler {
+	return &MovieHandler{movieService}
+}
+
+func (h *MovieHandler) ListMovies(w http.ResponseWriter, r *http.Request) {
+	movies, err := h.movieService.ListMovies()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-}
 
-//returns a handler function that lists movies containing the name, opening and comment count
-func (mh *MovieHandler) GetMoviesHandler() http.HandlerFunc{
-	return func(w *http.ResponseWriter, r *http.request){
-		movies, err := mh.service.GetMovies()
-		if err != nil{
-			utils.WriteError(w,err)
-			return
+	// Sort movies by release date from earliest to newest
+	sortedMovies := h.movieService.SortMoviesByReleaseDate(movies)
+
+	// Add comment count to each movie
+	for i := range sortedMovies {
+		commentCount, err := h.movieService.GetCommentCount(sortedMovies[i].EpisodeId)
+		if err == nil {
+			sortedMovies[i].CommentCount = commentCount
 		}
-
-		utils.WriteJson(w, http.StatusOK, movies)
 	}
+
+	// Marshal movies to JSON
+	jsonMovies, err := json.Marshal(sortedMovies)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonMovies)
 }
 
-// returs a handle function that lists characters for a movie
-func (mh *CharacterHandler) GetCharactersHandler() http.HandlerFunc{
-	return func(w http.ResponseWriter, r *http.Request){
-		movieID := mux.Vars(r)["id"]
-		sort := r.Url.Query().Get("sort")
-		filter := r.URL.Query().Get("filter")
-
-		//parse limit and ofset query parameters
-		limitStr := r.URL.Query().Get("limit")
-		offsetStr := r.URL.Query().Get("offset")
-		limit, _ := strconv.Atoi(limitStr)
-		offset, _ := strconv.Atoi(offsetStr)
-
-		characters, err := mh.service.GetCharacters(movieID, sort, filter, limit,offset)
-		if err != nil{
-			utils.WriteError(w,err)
-			return
-		}
-		utils.WriteJson(w, http.StatusOK, characters)
+func (h *MovieHandler) ListCharacters(w http.ResponseWriter, r *http.Request) {
+	// Get movie ID from path parameter
+	vars := mux.Vars(r)
+	movieID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
+
+	// Parse query parameters
+	params := r.URL.Query()
+	sortBy := params.Get("sortBy")
+	sortOrder := params.Get("sortOrder")
+	filterByGender := params.Get("filterByGender")
+
+	// Get list of characters for the movie
+	characters, err := h.movieService.ListCharacters(movieID, sortBy, sortOrder, filterByGender)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Calculate metadata
+	totalCharacters := len(characters)
+	totalHeightCm := h.movieService.GetTotalHeight(characters)
+	totalHeightFtIn, err := utils.ConvertCmToFtIn(totalHeightCm)
+
+	// Create metadata JSON object
+	metadata := map[string]interface{}{
+		"totalCharacters": totalCharacters,
+		"totalHeightCm":   totalHeightCm,
+		"totalHeightFtIn": totalHeightFtIn,
+	}
+
+	// Create response object
+	response := map[string]interface{}{
+		"metadata":   metadata,
+		"characters": characters,
+	}
+
+	// Marshal response to JSON
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonResponse)
+}
+
+func getMovieHandler(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    movieID := vars["movieID"]
+
+    // check if the movie exists
+    movie, ok := movies[movieID]
+    if !ok {
+        w.WriteHeader(http.StatusNotFound)
+        return
+    }
+
+    // return the movie information
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(movie)
 }

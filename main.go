@@ -1,62 +1,71 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"net/http"
-	"os"
+    "log"
+    "net/http"
 
-	"github.com/go-redis/redis"
-	"github.com/gorilla/mux"
+    "github.com/gorilla/mux"
 	"github.com/joho/godotenv"
-	"github.com/jcezetah/Swapi_api/handlers"
-	"github.com/jcezetah/Swapi_api/services"
+	_ "github.com/lib/pq"
+
+    "github.com/go-redis/redis/v8"
+
+    "github.com/jcezetah/Swapi_api/cache"
+    "github.com/jcezetah/Swapi_api/handlers"
+    "github.com/jcezetah/Swapi_api/services"
+    "github.com/jcezetah/Swapi_api/utils"
+	"github.com/jcezetah/Swapi_api/db"
 )
 
 func main() {
 	// Load environment variables from .env file
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+		log.Fatalf("Failed to load env file: %s", err)
 	}
 
-	// Initialize Redis client
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     os.Getenv("REDIS_ADDR"),
-		Password: os.Getenv("REDIS_PASSWORD"),
-		DB:       0,
-	})
+	db.Connect()
 
-	// Initialize Postgres client
-	db, err := services.NewPostgresClient(os.Getenv("DB_URI"))
-	if err != nil {
-		log.Fatalf("Error initializing Postgres client: %v", err)
+    // Initialize Redis client
+    redisClient := redis.NewClient(&redis.Options{
+        Addr: "env",
+		Password: "env",
+		DB: "env",
+    })
+
+    // Initialize cache
+    cache, err := cache.NewRedisCache(redisClient)
+
+	if err != nil{
+
 	}
 
-	// Initialize movie service
-	movieService := services.NewMovieService(redisClient)
+    // Initialize movie service
+    movieService := services.NewMovieService(cache)
 
-	// Initialize comment service
-	commentService := services.NewCommentService(db)
+	//Initialize comment service
+	commentService := services.NewCommentService()
 
-	// Initialize character service
-	characterService := services.NewCharacterService()
+    // Initialize movie handler
+    movieHandler := handlers.NewMovieHandler(movieService)
 
-	// Initialize router
-	r := mux.NewRouter()
+	//Initialize comment handler
+	commentHandler := handlers.CommentsHandler(commentService, db)
 
-	// Register movie handlers
-	movieHandler := handlers.NewMovieHandler(movieService)
-	r.HandleFunc("/movies", movieHandler.ListMovies).Methods("GET")
-	r.HandleFunc("/movies/comments", movieHandler.AddComment).Methods("POST")
-	r.HandleFunc("/movies/{id}/comments", movieHandler.ListComments).Methods("GET")
-	r.HandleFunc("/movies/{id}/characters", movieHandler.ListCharacters).Methods("GET")
+    // Initialize router
+    router := mux.NewRouter()
 
-	// Register character handlers
-	characterHandler := handlers.NewCharacterHandler(characterService)
-	r.HandleFunc("/characters", characterHandler.ListCharacters).Methods("GET")
+    // Define routes
+    router.HandleFunc("/movies", movieHandler.ListMovies).Methods(http.MethodGet)
+    router.HandleFunc("/movies/{id}/characters", movieHandler.ListCharacters).Methods(http.MethodGet)
+	router.HandleFunc("/movies/{id}/comments", commentHandler.AddComment).Methods("POST")
+	router.HandleFunc("/movies/{id}/comments", commentHandler.ListComments).Methods("GET")
 
-	// Serve API
-	fmt.Println("Starting server...")
-	log.Fatal(http.ListenAndServe(":8080", r))
+
+    // Start server, remeber to change 8080 when you create the actual cache
+	port := utils.Getenv("PORT")
+	log.Printf("Starting server on port %s\n", port)
+    log.Fatal(http.ListenAndServe(":8080", router))
+
+	
 }

@@ -1,39 +1,67 @@
 package utils
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"encoding/json"
 )
 
-//Represents an error with the specific HTTP status code
-type ApiError struct{
-	Code int `json:"code"`
+// APIError represents an error returned by an API.
+type APIError struct {
 	Message string `json:"message"`
 }
 
-//Creates a new instance if ApiError with the HTTP status code
-func NewApiError(code int, message string) *ApiError{
-	return &ApiError{
-		Code: code,
-		Message: message,
-	}
+// Error returns the error message.
+func (e *APIError) Error() string {
+	return e.Message
 }
 
-//return string representation of ApiError
-func (e *ApiError) Error() string{
-	errmsg := fmt.Sprintf("ApiError{code=%d, message=%s}", e.Code, e.Message)
-	return errmsg
+// NewAPIError returns a new instance of APIError with the given message.
+func NewAPIError(message string) *APIError {
+	return &APIError{Message: message}
 }
 
-//writes data to an HTTP respone in JSON format
-func WriteJson(w http.ResponseWriter, code int, data interface{}){
-	w.Header().Set("Content-Type", "apllication/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(data)
+// DBError represents an error related to a database operation.
+type DBError struct {
+	Message string `json:"message"`
 }
 
-//writes an APiError to a HTTP response
-func WriteError(w http.ResponseWriter, err *ApiError){
-	WriteJson(w,err.Code, err)
+// Error returns the error message.
+func (e *DBError) Error() string {
+	return e.Message
+}
+
+// NewDBError returns a new instance of DBError with the given message.
+func NewDBError(message string) *DBError {
+	return &DBError{Message: message}
+}
+
+// ValidationError represents an error caused by invalid input.
+type ValidationError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+// Error returns the error message.
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Field, e.Message)
+}
+
+// NewValidationError returns a new instance of ValidationError with the given field and message.
+func NewValidationError(field string, message string) *ValidationError {
+	return &ValidationError{Field: field, Message: message}
+}
+
+func RespondWithError(w http.ResponseWriter,status int, err error){
+	w.WriteHeader(status)
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "error": err.Error(),
+    })
+}
+
+func RespondWithJSON(w http.ResponseWriter, status int, data interface{}) {
+    w.WriteHeader(status)
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(data)
 }

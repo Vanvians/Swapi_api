@@ -2,79 +2,81 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/jcezetah/swapi_api/models"
-	"github.com/jcezetah/swapi_api/services"
-	"github.com/jcezetah/swapi_api/utils/errors"
+	"github.com/jmoiron/sqlx"
+
+	"github.com/jcezetah/Swapi_api/models"
+	"github.com/jcezetah/Swapi_api/services"
+	"github.com/jcezetah/Swapi_api/utils"
 )
 
 type CommentsHandler struct {
-	service services.CommentService
-	logger  *log.Logger
+	commentService services.CommentServiceInt
+	db           *sqlx.DB
 }
 
-func NewCommentsHandler(service services.CommentService, logger *log.Logger) *CommentsHandler {
+func NewCommentsHandler(movieService services.MovieService, db *sqlx.DB) *CommentsHandler {
 	return &CommentsHandler{
-		service: service,
-		logger:  logger,
+		commentService: services.CommentServiceInt,
+		db:           db,
 	}
 }
 
-func (h *CommentsHandler) handleAddComment(w http.ResponseWriter, r *http.Request) {
+func (h *CommentsHandler) AddComment(w http.ResponseWriter, r *http.Request) {
+	// Parse movie ID from URL parameter
+	vars := mux.Vars(r)
+	movieID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("Invalid movie ID:%s", movieID))
+		return
+	}
+
+	// Parse comment from request body
 	var comment models.Comment
-	err := json.NewDecoder(r.Body).Decode(&comment)
+	err = json.NewDecoder(r.Body).Decode(&comment)
 	if err != nil {
-		h.logger.Printf("error while decoding comment from request body: %v\n", err)
-		errors.NewBadRequestError("invalid request body").WriteTo(w)
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("Invalid comment payload"))
 		return
 	}
 
-	addedComment, err := h.service.AddComment(&comment)
-	if err != nil {
-		errors.HandleError(err).WriteTo(w)
+	// Validate comment length
+	if len(comment.Comment) > 500 {
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("Comment length exceeds limit of 500 characters"))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(addedComment)
+	// Get commenter's public IP address
+	comment.IPAddress = r.RemoteAddr
+
+	// Store comment in database
+	err = h.commentService.AddComment(movieID, &comment, h.db)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Errorf("Failed to store comment"))
+		return
+	}
+
+	utils.RespondWithJSON(w, http.StatusOK, comment)
 }
 
-func (h *CommentsHandler) handleListComments(w http.ResponseWriter, r *http.Request) {
+func (h *CommentsHandler) ListComments(w http.ResponseWriter, r *http.Request) {
+	// Parse movie ID from URL parameter
 	vars := mux.Vars(r)
-	movieID, ok := vars["movie_id"]
-	if !ok {
-		errors.NewBadRequestError("missing movie_id parameter").WriteTo(w)
-		return
-	}
-
-	comments, err := h.service.ListComments(movieID)
+	movieID, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		errors.HandleError(err).WriteTo(w)
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("Invalid movie ID"))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(comments)
-}
-
-func (h *CommentsHandler) handleGetComment(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	commentID, ok := vars["comment_id"]
-	if !ok {
-		errors.NewBadRequestError("missing comment_id parameter").WriteTo(w)
-		return
-	}
-
-	comment, err := h.service.GetComment(commentID)
+	// Retrieve comments for movie from database
+	comments, err := h.commentService.GetComments(movieID, h.db)
 	if err != nil {
-		errors.HandleError(err).WriteTo(w)
+		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Errorf("Failed to retrieve comments"))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(comment)
+	utils.RespondWithJSON(w, http.StatusOK, comments)
 }

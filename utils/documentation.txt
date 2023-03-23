@@ -1,0 +1,4 @@
+package- services
+
+package-utils
+-NewApiError- creates a new instance of api error with hhtp status.Takes in eroor code and message as inputs

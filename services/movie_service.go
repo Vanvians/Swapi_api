@@ -1,77 +1,136 @@
 package services
 
-import(
-	"context"
+import (
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
-	"time"
+	"strconv"
+	"strings"
 
-	"github.com/go-redis/redis/v8"
-	"github.com/jinzhu/gorm"
-	"github.com/pkg/errors"
-
-	"swapi_api/models"
-	"swapi_api/utils"
+	"github.com/jcezetah/Swapi_api/cache"
+	"github.com/jcezetah/Swapi_api/utils"
+	"github.com/jcezetah/Swapi_api/models"
 )
 
+
+
 type MovieService struct {
-	db *gorm.DB
-	cache *redis.Client
+	cache cache.RedisCache
 }
 
-func NewMovieService(db *gorm.DB, cache *redis.Client) *MovieService{
-	return &MovieService{
-		db: db,
-		cache: cache,
+func NewMovieService(cache cache.RedisCache) *MovieService {
+	return &MovieService{cache}
+}
+
+func (s *MovieService) ListMovies() ([]models.Movie, error) {
+	// Check if movies are already cached
+	movies, err := s.cache.Get("movies")
+	if err == nil {
+		// Movies found in cache, unmarshal and return
+		var cachedMovies []models.Movie
+		err = json.Unmarshal([]byte(movies), &cachedMovies)
+		if err == nil {
+			return cachedMovies, nil
+		}
 	}
-}
 
-//fetches all movies and sorts them by release date
-func (s *MovieService) GetMovies() ([]*models.movie, error){
-	movies, err := s.getMoviesFromCache()
+	// Movies not found in cache, fetch from swapi.dev
+	resp, err := http.Get(utils.BaseUrlFilms)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get movies from cache")
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var response struct {
+		Results []struct {
+			EpisodeID   int    `json:"episode_id"`
+			Title       string `json:"title"`
+			OpeningCrawl string `json:"opening_crawl"`
+			ReleaseDate string `json:"release_date"`
+		} `json:"results"`
 	}
 
-	if len(movies) == 0{
-		movies, err := s.getMoviesFromApi()
-		if err != nil{
-			return nil, errors.Wrap("failed to get movies from API")
-		}
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	if err != nil {
+		return nil, err
+	}
 
-		err = s.cacheMovies(movies)
-		if err != nil{
-			return nil, errors.Wrap(err, "failed to cache movies")
+	// Convert response to Movie objects
+	movies = make([]models.Movie, len(response.Results))
+	for i, result := range response.Results {
+		movies[i] = .Movie{
+			EpisodeId:   result.EpisodeID,
+			Title:       result.Title,
+			OpeningCrawl: result.OpeningCrawl,
+			ReleaseDate: result.ReleaseDate,
 		}
 	}
 
-	sort.Slice(movies, func(i, j int)bool{
-		return movies[i].ReleaseDate.Before(movies[j].ReleaseDate)
-	})
+	// Cache movies
+	jsonMovies, err := json.Marshal(movies)
+	if err != nil {
+		return nil, err
+	}
+	err = s.cache.Set("movies", string(jsonMovies), utils.CacheExpiration)
+	if err != nil {
+		return nil, err
+	}
 
 	return movies, nil
 }
 
-//Fetches a single movie by ID
-func (s *MovieService) GetMovie(id string)(*models.Movie, error){
-	movie, err := s.getMovieFromCache(id)
-	if err != nil{
-		return nil, errors.Wrap(err, "failed to get movie from cache")
-	}
+func (s *MovieService) SortMoviesByReleaseDate(movies []models.Movie) []Movie {
+	sort.Slice(movies, func(i, j int) bool {
+		return movies[i].ReleaseDate < movies[j].ReleaseDate
+	})
+	return movies
+}
 
-	if movie == nil{
-		movie, err := s.getMoviesFromApi(id)
-		if err != nil{
-			return nil, errors.Wrap(err, "failed to get movie from API")
-		}
+func (s *MovieService) ListCharacters(movieID int, sortBy string, sortOrder string, filterByGender string) ([]Character, error) {
+    // Get the list of characters for the specified movie ID
+    characters, err := GetCharacters(movieID)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Apply the sorting and filtering options
+    switch sortBy {
+    case "name":
+        sort.Slice(characters, func(i, j int) bool {
+            if sortOrder == "desc" {
+                return characters[i].Name > characters[j].Name
+            }
+            return characters[i].Name < characters[j].Name
+        })
+    case "height":
+        sort.Slice(characters, func(i, j int) bool {
+            if sortOrder == "desc" {
+                return characters[i].HeightCm > characters[j].HeightCm
+            }
+            return characters[i].HeightCm < characters[j].HeightCm
+        })
+    }
+    if filterByGender != "" {
+        var filteredCharacters []models.Character
+        for _, c := range characters {
+            if c.Gender == filterByGender {
+                filteredCharacters = append(filteredCharacters, c)
+            }
+        }
+        characters = filteredCharacters
+    }
+    
+    return characters, nil
+}
 
-		err = s.cacheMovie(movie)
-		if err != nil{
-			return nil, errors.Wrap(err, "failed to cache movie")
-		}
-	}
-	return movie, nil
+func GetTotalHeight(characters []models.Character) (int, error) {
+    // Calculate the total height of the specified list of characters
+    totalHeightCm := 0
+    for _, c := range characters {
+        totalHeightCm += c.HeightCm
+    }
+    
+    return totalHeightCm, nil
 }
 
