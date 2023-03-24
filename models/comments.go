@@ -1,7 +1,6 @@
 package models
 
 import (
-	"net/http"
 	"time"
 )
 
@@ -13,13 +12,3 @@ type Comment struct{
 	CreatedAt time.Time `json:"created_at"`
 }
 
-type CommentRepository interface{
-	ListComments(EpisodeID) ([]Comment, error)
-	HandleAddComment(http.Response, http.Request)
-	HandleListComments(http.Response, http.Request)
-
-}
-
-type CommentService interface{
-
-}

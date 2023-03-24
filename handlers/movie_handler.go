@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -13,10 +14,11 @@ import (
 
 type MovieHandler struct {
 	movieService *services.MovieService
+	commentService *services.CommentService
 }
 
-func NewMovieHandler(movieService *services.MovieService) *MovieHandler {
-	return &MovieHandler{movieService}
+func NewMovieHandler(movieService *services.MovieService, commentService *services.CommentService) *MovieHandler {
+	return &MovieHandler{movieService, commentService}
 }
 
 func (h *MovieHandler) ListMovies(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +33,7 @@ func (h *MovieHandler) ListMovies(w http.ResponseWriter, r *http.Request) {
 
 	// Add comment count to each movie
 	for i := range sortedMovies {
-		commentCount, err := h.movieService.GetCommentCount(sortedMovies[i].EpisodeId)
+		commentCount, err := h.commentService.GetCommentCount(sortedMovies[i].MovieId)
 		if err == nil {
 			sortedMovies[i].CommentCount = commentCount
 		}
@@ -72,8 +74,15 @@ func (h *MovieHandler) ListCharacters(w http.ResponseWriter, r *http.Request) {
 
 	// Calculate metadata
 	totalCharacters := len(characters)
-	totalHeightCm := h.movieService.GetTotalHeight(characters)
+	totalHeightCm, err := h.movieService.GetTotalHeight(characters)
+	if err != nil{
+		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Errorf("error getting total height"))
+	}
+
 	totalHeightFtIn, err := utils.ConvertCmToFtIn(totalHeightCm)
+	if err != nil{
+		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Errorf("error converting height to ft/in"))
+	}
 
 	// Create metadata JSON object
 	metadata := map[string]interface{}{
@@ -97,20 +106,4 @@ func (h *MovieHandler) ListCharacters(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(jsonResponse)
-}
-
-func getMovieHandler(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    movieID := vars["movieID"]
-
-    // check if the movie exists
-    movie, ok := movies[movieID]
-    if !ok {
-        w.WriteHeader(http.StatusNotFound)
-        return
-    }
-
-    // return the movie information
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(movie)
 }

@@ -1,12 +1,12 @@
 package services
 
 import (
-	"time"
+	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
 	"github.com/jcezetah/Swapi_api/models"
-	"github.com/jcezetah/Swapi_api/db"
+	"github.com/jcezetah/Swapi_api/cache"
 )
 
 type CommentServiceInt interface {
@@ -15,22 +15,18 @@ type CommentServiceInt interface {
 	GetComments(movieID int, db *sqlx.DB) ([]models.Comment, error)
 }
 
-
-func (*CommentServiceInt) AddComment(movieID int, comment *models.Comment, db *sqlx.DB) error {
-	// Insert new comment into database
-	_, err := db.Exec(`
-		INSERT INTO comments (movie_id, text, ip_address, created_at)
-		VALUES ($1, $2, $3, $4)`,
-		movieID, comment.Comment, comment.IPAddress, time.Now().UTC())
-	if err != nil {
-		return err
-	}
-	return nil
+type CommentService struct {
+    cache *cache.RedisCache
+	db *sqlx.DB
 }
 
-func (*CommentServiceInt) GetComments(movieID int, db *sqlx.DB) ([]models.Comment, error) {
+func NewCommentService(cache *cache.RedisCache, db *sqlx.DB) *CommentService{
+	return &CommentService{cache, db}
+}
+
+func (s *CommentService) GetComments(movieID int) ([]models.Comment, error) {
 	// Retrieve comments for movie from database
-	rows, err := db.Queryx(`
+	rows, err := s.db.Queryx(`
 		SELECT text, ip_address, created_at
 		FROM comments
 		WHERE movie_id = $1
@@ -55,9 +51,9 @@ func (*CommentServiceInt) GetComments(movieID int, db *sqlx.DB) ([]models.Commen
 	return comments, nil
 }
 
-func AddComment(movieID string, comment *models.Comment, db *sqlx.DB) error {
+func (s *CommentService) AddComment(movieID int, comment *models.Comment) error {
     // Build the SQL statement
-    stmt, err := db.Prepare("INSERT INTO comments (comment_ID, movie_id, text, IPaddress, Time) VALUES (?, ?, ?)")
+    stmt, err := s.db.Prepare("INSERT INTO comments (comment_ID, movie_id, text, IPaddress, Time) VALUES (?, ?, ?)")
     if err != nil {
         return err
     }
@@ -72,13 +68,13 @@ func AddComment(movieID string, comment *models.Comment, db *sqlx.DB) error {
     return nil
 }
 
-func GetCommentCount(movieID int) (int, error) {
+func (s *CommentService)GetCommentCount(movieID int) (int, error) {
 	// Prepare a SQL query to count the comments for the specified movie ID
     query := fmt.Sprintf("SELECT COUNT(*) FROM comments WHERE movie_id = %d", movieID)
 
     // Execute the query and retrieve the comment count
     var commentCount int
-    err = db.QueryRow(query).Scan(&commentCount)
+    err := s.db.QueryRow(query).Scan(&commentCount)
     if err != nil {
         return 0, fmt.Errorf("error retrieving comment count: %v", err)
     }

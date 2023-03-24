@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -20,11 +19,11 @@ type Comment struct {
 }
 
 // db represents the database connection.
-var db *sql.DB
+var DB *sqlx.DB
 
 func Connect() (*sqlx.DB, error) {
 	// Load environment variables
-	err := godotenv.Load()
+	err := godotenv.Load("app.env")
 	if err != nil {
 		log.Fatalf("Failed to load environment variables: %s", err)
 	}
@@ -47,25 +46,25 @@ func Connect() (*sqlx.DB, error) {
 }
 
 // InitializeDB initializes the database connection.
-func InitializeDB(dataSourceName string) (*sql.DB, error) {
+func InitializeDB(dataSourceName string) (*sqlx.DB, error) {
     var err error
-    db, err = sql.Open("mysql", dataSourceName)
+    DB, err = sqlx.Open("postgres", dataSourceName)
     if err != nil {
         return nil, err
     }
 
-    err = db.Ping()
+    err = DB.Ping()
     if err != nil {
         return nil, err
     }
 
-    return db, nil
+    return DB, nil
 }
 
 // SaveComment saves a comment to the database.
 func SaveComment(ctx context.Context, comment Comment) error {
     query := "INSERT INTO comments (post_id, content) VALUES (?, ?)"
-    result, err := db.ExecContext(ctx, query, comment.PostID, comment.Content)
+    result, err := DB.ExecContext(ctx, query, comment.PostID, comment.Content)
     if err != nil {
         return err
     }
@@ -85,7 +84,7 @@ func GetComments(ctx context.Context, postID int) ([]Comment, error) {
     var comments []Comment
 
     query := "SELECT id, post_id, content, created_at FROM comments WHERE post_id = ?"
-    rows, err := db.QueryContext(ctx, query, postID)
+    rows, err := DB.QueryContext(ctx, query, postID)
     if err != nil {
         return nil, err
     }
@@ -105,5 +104,5 @@ func GetComments(ctx context.Context, postID int) ([]Comment, error) {
 
 // CloseDB closes the database connection.
 func CloseDB() error {
-    return db.Close()
+    return DB.Close()
 }

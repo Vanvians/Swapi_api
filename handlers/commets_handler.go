@@ -15,15 +15,12 @@ import (
 )
 
 type CommentsHandler struct {
-	commentService services.CommentServiceInt
+	commentService *services.CommentService
 	db           *sqlx.DB
 }
 
-func NewCommentsHandler(movieService services.MovieService, db *sqlx.DB) *CommentsHandler {
-	return &CommentsHandler{
-		commentService: services.CommentServiceInt,
-		db:           db,
-	}
+func NewCommentsHandler(commentService *services.CommentService, db *sqlx.DB) *CommentsHandler {
+	return &CommentsHandler{commentService, db}
 }
 
 func (h *CommentsHandler) AddComment(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +28,7 @@ func (h *CommentsHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	movieID, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("Invalid movie ID:%s", movieID))
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("invalid movie ID: %d", movieID))
 		return
 	}
 
@@ -39,13 +36,13 @@ func (h *CommentsHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 	var comment models.Comment
 	err = json.NewDecoder(r.Body).Decode(&comment)
 	if err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("Invalid comment payload"))
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("invalid comment payload"))
 		return
 	}
 
 	// Validate comment length
 	if len(comment.Comment) > 500 {
-		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("Comment length exceeds limit of 500 characters"))
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("comment length exceeds limit of 500 characters"))
 		return
 	}
 
@@ -53,9 +50,9 @@ func (h *CommentsHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 	comment.IPAddress = r.RemoteAddr
 
 	// Store comment in database
-	err = h.commentService.AddComment(movieID, &comment, h.db)
+	err = h.commentService.AddComment(movieID, &comment)
 	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Errorf("Failed to store comment"))
+		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Errorf("failed to store comment"))
 		return
 	}
 
@@ -67,14 +64,14 @@ func (h *CommentsHandler) ListComments(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	movieID, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("Invalid movie ID"))
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Errorf("invalid movie ID"))
 		return
 	}
 
 	// Retrieve comments for movie from database
-	comments, err := h.commentService.GetComments(movieID, h.db)
+	comments, err := h.commentService.GetComments(movieID)
 	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Errorf("Failed to retrieve comments"))
+		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Errorf("failed to retrieve comments"))
 		return
 	}
 

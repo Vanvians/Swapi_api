@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -11,7 +12,8 @@ type RedisCache struct {
 }
 
 func NewRedisCache(client *redis.Client) (*RedisCache, error) {
-	_, err := client.Ping().Result()
+	ctx := context.Background()
+	_, err := client.Ping(ctx).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +22,8 @@ func NewRedisCache(client *redis.Client) (*RedisCache, error) {
 }
 
 func (c *RedisCache) Get(key string) (string, error) {
-	val, err := c.client.Get(key).Result()
+	ctx := context.Background()
+	val, err := c.client.Get(ctx,key).Result()
 	if err == redis.Nil {
 		return "", nil
 	} else if err != nil {
@@ -29,10 +32,10 @@ func (c *RedisCache) Get(key string) (string, error) {
 	return val, nil
 }
 
-func (c *RedisCache) Set(key string, value string, expiration time.Duration) error {
-	return c.client.Set(key, value, expiration).Err()
+func (c *RedisCache) Set(ctx context.Context,key string, value string, expiration time.Duration) error {
+	return c.client.Set(ctx,key, value, expiration).Err()
 }
 
-func (c *RedisCache) Delete(key string){
-
+func (c *RedisCache) Delete(key string) error {
+	return c.client.Del(context.Background(), key).Err()
 }
