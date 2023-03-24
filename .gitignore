@@ -1,1 +1,4 @@
 app.env
+.vscode/launch.json
+__debug_bin.exe
+Swapi_api.exe

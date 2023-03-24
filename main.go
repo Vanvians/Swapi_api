@@ -19,7 +19,7 @@ import (
 
 func main() {
 	// Load environment variables from .env file
-	err := godotenv.Load()
+	err := godotenv.Load("app.env")
 	if err != nil {
 		log.Fatalf("Failed to load env file: %s", err)
 	}
@@ -28,8 +28,7 @@ func main() {
 
     // Initialize Redis client
     redisClient := redis.NewClient(&redis.Options{
-        Addr: os.Getenv("DB_HOST"),
-		Password: os.Getenv("REDIS_PASSWORD"),
+        Addr: os.Getenv("REDIS_HOST"),
         DB: 1,
     })
 
